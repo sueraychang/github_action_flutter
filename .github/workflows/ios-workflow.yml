@@ -1,0 +1,61 @@
+name: ios workflow
+on: 
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Jobs to run (android OR ios OR all)'
+        required: true
+        default: 'all'
+
+# Specify the flutter version to use.
+# env:
+#  flutter_version: "2.8.1"
+
+jobs:
+  build_ios:
+    runs-on: macos-11
+    if: ${{ github.event.inputs.job == 'ios' || github.event.inputs.job == 'all' }}
+    steps:
+      # Cache Flutter.
+      # For ubuntu the cache path is at: /opt/hostedtoolcache/flutter
+      # For macos the cache path is at: /Users/runner/hostedtoolcache/flutter
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v2
+        with:
+          path: /opt/hostedtoolcache/flutter
+          key: ${{ runner.OS }}-flutter-install-cache-${{ env.flutter_version }}
+      # Set up Flutter.
+      - name: Clone Flutter repository with stable channel
+        uses: subosito/flutter-action@v1
+        with:
+          channel: stable
+          # flutter-version: ${{ env.flutter_version }}
+      - run: flutter doctor -v
+
+      # Checkout code and get packages.
+      - name: Checkout code and get packages
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - run: flutter pub get
+      - run: flutter test
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - run: flutter build ios --release --flavor=dev --no-codesign -v
+
+      # Setup Ruby, Bundler, and Gemfile dependencies
+      - name: Setup Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.0.3'
+          bundler-cache: true
+          working-directory: ios
+      
+      # Build and deploy with Fastlane 🚀.
+      - run: bundle exec fastlane build
+        env:
+          APP_STORE_CONNECT_API_KEY_ISSURE_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSURE_ID }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          GIT_PERSONAL_ACCESS_TOKEN: ${{ secrets.GIT_PERSONAL_ACCESS_TOKEN }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+        working-directory: ios

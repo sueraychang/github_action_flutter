@@ -1,0 +1,52 @@
+name: web workflow
+on: 
+  workflow_dispatch:
+
+jobs:
+  build_android:
+    runs-on: ubuntu-latest
+    steps:
+      # Cache Flutter.
+      # For ubuntu the cache path is at: /opt/hostedtoolcache/flutter
+      # For macos the cache path is at: /Users/runner/hostedtoolcache/flutter
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v2
+        with:
+          path: /opt/hostedtoolcache/flutter
+          key: ${{ runner.OS }}-flutter-install-cache-${{ env.flutter_version }}
+      # Set up Flutter.
+      - name: Clone Flutter repository with stable channel
+        uses: subosito/flutter-action@v1
+        with:
+          channel: stable
+          # flutter-version: ${{ env.flutter_version }}
+      - run: flutter doctor -v
+
+      # Checkout code and get packages.
+      - name: Checkout code and get packages
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - run: flutter pub get
+      - run: flutter test
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      # Get version name based on pubspec.yaml
+      - name: Get the version name
+        id: versionNameId
+        run: echo "::set-output name=versionName::$(cat pubspec.yaml | grep "version:" | awk '{print $(NF)}' | awk -F '[+]' '{print $(NF-1)}')"
+
+      # Get version name based on the git commit counts
+      - name: Get the version code
+        id: versionCodeId
+        run: echo "::set-output name=versionCode::$(echo $(git rev-list HEAD --count))"
+
+      - run: flutter pub get
+      - run: flutter build web
+
+      # Archive the outputs
+      - name: Archive the outputs
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ steps.versionNameId.outputs.versionName }}.${{ steps.versionCodeId.outputs.versionCode }}
+          path: build/web/
